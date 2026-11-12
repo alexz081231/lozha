@@ -1,0 +1,19 @@
+{
+  "name": "lozha",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ложа — свой маленький кинозал: фильмы и музыка вместе с друзьями",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "node --experimental-sqlite --disable-warning=ExperimentalWarning server/index.js",
+    "https": "node --experimental-sqlite --disable-warning=ExperimentalWarning server/index.js --https",
+    "setup": "node scripts/setup.mjs",
+    "postinstall": "node scripts/setup.mjs --quiet"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

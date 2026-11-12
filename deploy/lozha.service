@@ -1,0 +1,52 @@
+# systemd-сервис Ложи: /etc/systemd/system/lozha.service
+# Пользователь lozha, код в /var/www/lozha, данные в /var/lib/lozha (см. README, «Свой сервер»).
+[Unit]
+Description=Ложа — кинозал и музыка вместе с друзьями
+After=network.target
+
+[Service]
+Type=simple
+User=lozha
+Group=lozha
+WorkingDirectory=/var/www/lozha
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOST=127.0.0.1
+Environment=LOZHA_DATA=/var/lib/lozha
+Environment=LOZHA_BIN=/var/lib/lozha/bin
+Environment=LOZHA_TRUST_PROXY=1
+Environment=LOZHA_ACCEL=/_media/
+Environment=HOME=/var/lib/lozha
+Environment=XDG_CACHE_HOME=/var/lib/lozha/cache
+ExecStart=/usr/bin/node --experimental-sqlite --disable-warning=ExperimentalWarning server/index.js
+Restart=always
+RestartSec=3
+UMask=0027
+LimitNOFILE=65536
+# Пересжатие видео не должно душить соседние сервисы
+CPUWeight=40
+Nice=5
+
+# Песочница: процесс может писать только в свою папку с данными
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/lozha
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
