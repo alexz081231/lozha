@@ -17,6 +17,7 @@ export class RoomSession {
     this.joined = false;
     this.viewers = [];
     this.drift = 0;
+    this.fixing = false; // идёт подтягивание скоростью (с запасом, чтобы скорость не дёргалась)
     this.localUntil = 0;
     this.lastSeek = 0;
     this.seekSeq = -1;
@@ -121,9 +122,14 @@ export class RoomSession {
       if (want) {
         if (el.paused) this.h.play();
         if (!el.seeking) {
-          if (Math.abs(diff) > 1.2) { seek(t + 0.06); rate(s.rate); } // большое расхождение — перемоткой
-          else if (Math.abs(diff) > 0.045) rate(s.rate * (1 + clamp(diff * 0.6, -0.12, 0.12))); // небольшое — скоростью
-          else rate(s.rate);
+          const a = Math.abs(diff);
+          if (a > 1.2) { this.fixing = false; seek(t + 0.06); rate(s.rate); } // большое расхождение — перемоткой
+          else {
+            // Скорость меняем редко и слабо: Safari на частую смену playbackRate отвечает микропрерываниями.
+            // Начинаем подтягивать, только когда отстали заметно (>0,2 с), и возвращаем обычную скорость, когда догнали (<0,04 с).
+            if (a > 0.2) this.fixing = true; else if (a < 0.04) this.fixing = false;
+            rate(this.fixing ? s.rate * (1 + clamp(diff * 0.5, -0.05, 0.05)) : s.rate);
+          }
         }
       } else {
         if (!el.paused) this.h.pause();
