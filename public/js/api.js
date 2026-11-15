@@ -47,7 +47,7 @@ export async function loadMe() {
   const me = await get('/api/me', { quiet: true });
   store.app = me.app || store.app;
   store.me = me.user;
-  store.can = me.can || { films: false, music: false };
+  store.can = me.can || { films: false, music: false, manage: false };
   store.ytdlp = me.ytdlp;
   store.secure = me.secure;
   store.warnPass = !!me.warnPass;

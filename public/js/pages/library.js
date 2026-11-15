@@ -13,7 +13,7 @@ export async function openFilm(id) {
   const m = store.media.get(id);
   if (!m || m.status !== 'ready') return;
   try {
-    if (store.me.role === 'owner') {
+    if (store.can.manage) {
       const r = await post('/api/rooms', { mediaId: id }); // повторное «Смотреть» вернёт уже идущую комнату
       nav.go(`/room/${r.id}`);
     } else {
@@ -24,7 +24,7 @@ export async function openFilm(id) {
 }
 
 function filmCard(m, i) {
-  const owner = store.me.role === 'owner';
+  const manage = store.can.manage;
   const el = h('article.film', { style: { '--i': Math.min(i, 16) } });
   const badges = h('div.film-badges');
   const dur = h('span.chip.film-dur.num');
@@ -34,7 +34,7 @@ function filmCard(m, i) {
   const media = h('button.film-media', { type: 'button', onclick: () => openFilm(el._m.id) }, h('div.ph', icon('film')), badges, dur, live, play, work);
   const title = h('div.film-title');
   const meta = h('div.film-meta.num');
-  const more = owner ? h('button.btn.btn-ghost.btn-icon.btn-s.film-more', { type: 'button', 'aria-label': 'Действия', onclick: (e) => { e.stopPropagation(); openMenu(); } }, icon('more')) : null;
+  const more = manage ? h('button.btn.btn-ghost.btn-icon.btn-s.film-more', { type: 'button', 'aria-label': 'Действия', onclick: (e) => { e.stopPropagation(); openMenu(); } }, icon('more')) : null;
   el.append(media, h('div.film-body', h('div.grow', title, meta), more));
   let poster = null, workMode = '';
 
@@ -93,7 +93,7 @@ function filmCard(m, i) {
       if (x.status === 'error') {
         if (workMode !== 'error') {
           workMode = 'error';
-          work.replaceChildren(...kids(icon('warn'), h('div.err'), owner && x.retryable
+          work.replaceChildren(...kids(icon('warn'), h('div.err'), manage && x.retryable
             ? h('button.btn.btn-s', { type: 'button', onclick: (e) => { e.stopPropagation(); busy(e.currentTarget, true); post(`/api/media/${el._m.id}/retry`).catch((er) => toast(er.message)); } }, h('span', 'Повторить')) : null));
         }
         work.querySelector('.err').textContent = x.error;
@@ -121,14 +121,16 @@ export function libraryPage(root) {
   const grid = h('div.grid');
   const emptyBox = h('div');
   const strip = h('div.now-strip');
-  const tray = owner ? uploadsTray('video') : null;
-  const disk = owner ? h('div.disk', { hidden: true }) : null;
+  const tray = h('div');
+  const addBtn = h('div');
+  let trayEl = null, dropOff = null;
+  const disk = owner ? h('div.disk', { hidden: true }) : null; // место на диске видит только владелец
 
   const filterSeg = seg([{ value: 'all', label: 'Все' }, { value: 'ready', label: 'Готовые' }, { value: 'work', label: 'В работе' }], filter, (v) => { filter = v; ls.set('filter', v); rebuild(); });
   root.append(...kids(
     h('header.page-head',
       h('div', h('div.eyebrow', owner ? 'твоя библиотека' : 'библиотека'), h('h1.h1', 'Фильмы')),
-      h('div.page-tools', filterSeg, owner ? h('button.btn.btn-primary', { type: 'button', onclick: () => openAddSheet('video') }, icon('plus', 'ic-s'), 'Добавить') : null)),
+      h('div.page-tools', filterSeg, addBtn)),
     strip, disk, tray, grid, emptyBox,
   ));
 
@@ -144,9 +146,9 @@ export function libraryPage(root) {
     const total = films().length;
     emptyBox.replaceChildren(h('div.empty', icon('film'),
       total ? h('p', filter === 'work' ? 'Сейчас ничего не скачивается и не обрабатывается.' : 'Готовых фильмов пока нет.')
-        : owner ? h('p', 'Здесь пока пусто. Добавь первый фильм — по ссылке с YouTube, Rutube, VK или файлом с компьютера.')
+        : store.can.films ? h('p', 'Здесь пока пусто. Добавь первый фильм — по ссылке с YouTube, Rutube, VK или файлом с компьютера.')
           : h('p', 'Владелец ещё ничего не добавил. Загляни позже.'),
-      !total && owner ? h('button.btn.btn-primary.btn-l', { type: 'button', onclick: () => openAddSheet('video') }, icon('plus', 'ic-s'), 'Добавить фильм') : null));
+      !total && store.can.films ? h('button.btn.btn-primary.btn-l', { type: 'button', onclick: () => openAddSheet('video') }, icon('plus', 'ic-s'), 'Добавить фильм') : null));
   }
 
   function rebuild() {
@@ -192,14 +194,28 @@ export function libraryPage(root) {
     bus.on('media:reset', rebuild),
     bus.on('rooms', () => { for (const c of cards.values()) c.update(c._m); }),
     mountNow(strip),
-    owner ? enableDrop('video', (k) => (k === 'video' ? store.can.films : store.can.music)) : null,
+    bus.on('perms:changed', perms),
+    () => { dropOff?.(); dropOff = null; },
   ];
+
+  // Что показывать, зависит от прав: добавление, меню «⋯» на карточках. Права могут измениться на ходу.
+  function perms() {
+    addBtn.replaceChildren(...(store.can.films ? [h('button.btn.btn-primary', { type: 'button', onclick: () => openAddSheet('video') }, icon('plus', 'ic-s'), 'Добавить')] : []));
+    if (store.can.films && !trayEl) {
+      trayEl = uploadsTray('video');
+      tray.replaceChildren(trayEl);
+      dropOff = enableDrop('video', (k) => (k === 'video' ? store.can.films : store.can.music));
+    }
+    if (!store.can.films && trayEl) { trayEl.destroy(); trayEl = null; tray.replaceChildren(); dropOff?.(); dropOff = null; }
+    if (store.mediaLoaded) rebuild();
+  }
+  perms();
 
   if (store.mediaLoaded) rebuild(); else skeletons();
   refreshDisk();
 
   return () => {
     for (const off of offs) off?.();
-    tray?.destroy();
+    trayEl?.destroy();
   };
 }

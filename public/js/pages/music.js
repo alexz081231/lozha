@@ -6,7 +6,7 @@ import { seg, menu, toast, confirmDialog, promptDialog, seekline, avatar } from 
 import { openAddSheet, uploadsTray, enableDrop } from '../add.js';
 import { music, queueList } from '../musicplayer.js';
 
-const canEdit = (t) => store.me.role === 'owner' || t.addedBy === store.me.id;
+const canEdit = (t) => store.can.manage || t.addedBy === store.me.id;
 
 function trackRow(t, i) {
   const cover = h('button.track-cover', { type: 'button', 'aria-label': 'Играть' });

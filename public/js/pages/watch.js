@@ -17,7 +17,7 @@ export async function roomPage(root, roomId) {
   root.className = 'room';
   music.leave(); // фильм и музыка одновременно не играют
   await ensureMedia();
-  const owner = store.me.role === 'owner';
+  const canRun = store.can.manage; // включать, менять фильм и закрывать комнату
   let player = null;
   let closed = false;
 
@@ -86,7 +86,7 @@ export async function roomPage(root, roomId) {
   }
 
   const copyBtn = h('button.btn.btn-s', { type: 'button', title: 'Скопировать ссылку на комнату', onclick: async () => { toast((await copyText(location.href)) ? 'Ссылка на комнату скопирована' : 'Не получилось скопировать ссылку'); } }, icon('link', 'ic-s'), h('span', 'Ссылка'));
-  const ownerTools = owner ? [
+  const ownerTools = canRun ? [
     h('button.btn.btn-s', { type: 'button', title: 'Сменить фильм', onclick: () => pickFilm() }, icon('swap', 'ic-s'), h('span', 'Фильм')),
     h('button.btn.btn-s.btn-icon', {
       type: 'button', title: 'Закрыть комнату',

@@ -524,12 +524,13 @@ export function initRooms() {
   hub.on('room:status', (c, m) => c.room?.status(c, m));
   hub.on('room:chat', (c, m) => c.room?.say(c, m.text));
   hub.on('room:react', (c, m) => c.room?.react(c, m.emoji));
+  const canRun = (c) => c.user.role === 'owner' || getSetting('friendsEqual', true) !== false;
   hub.on('room:media', (c, m) => {
-    if (c.user.role !== 'owner') return c.send({ t: 'toast', text: 'Менять фильм может только владелец' });
+    if (!canRun(c)) return c.send({ t: 'toast', text: 'Менять фильм может только владелец' });
     if (c.room?.kind === 'film') c.room.setMedia(c, m.mediaId);
   });
   hub.on('room:close', (c) => {
-    if (c.user.role !== 'owner') return c.send({ t: 'toast', text: 'Закрыть комнату может только владелец' });
+    if (!canRun(c)) return c.send({ t: 'toast', text: 'Закрыть комнату может только владелец' });
     if (c.room?.kind === 'film') closeRoom(c.room, c);
   });
 

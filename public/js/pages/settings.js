@@ -121,7 +121,15 @@ export function settingsPage(root) {
         sw.setAttribute('aria-checked', String(on));
         try { await post('/api/system/settings', { friendsMusic: on }); } catch (e) { toast(e.message); sw.setAttribute('aria-checked', String(!on)); }
       };
+      const swEq = h('button.switch', { type: 'button', role: 'switch', 'aria-checked': String(s.settings.friendsEqual), 'aria-label': 'Друзья на равных правах' });
+      swEq.onclick = async () => {
+        const on = swEq.getAttribute('aria-checked') !== 'true';
+        swEq.setAttribute('aria-checked', String(on));
+        try { await post('/api/system/settings', { friendsEqual: on }); } catch (e) { toast(e.message); swEq.setAttribute('aria-checked', String(!on)); }
+      };
       box.replaceChildren(
+        h('div.card', h('div.kv', h('span', 'Друзья на равных правах'), swEq),
+          h('div.hint', 'Друзья смогут добавлять и удалять фильмы и музыку, переименовывать их, включать фильм, менять его и закрывать комнату. Приглашать новых людей и менять настройки по-прежнему можешь только ты.')),
         h('div.card',
           h('div.kv', h('span', 'Диск'), h('b.num', `занято ${fmtBytes(s.disk.used)} · свободно ${fmtBytes(s.disk.free)}`)),
           h('div.meter', h('i', { style: { width: `${total ? Math.max(1.5, (s.disk.used / total) * 100) : 0}%` } }))),
@@ -136,7 +144,7 @@ export function settingsPage(root) {
             s.cookies.present ? h('button.btn.btn-ghost.btn-s', { type: 'button', onclick: async () => { try { draw(await del('/api/system/cookies')); } catch (e) { toast(e.message); } } }, 'Удалить') : null),
           cookiePick),
         h('div.card', h('div.kv', h('span', 'Друзья могут добавлять музыку'), sw),
-          h('div.hint', 'Фильмы всегда добавляешь только ты. Музыку друзья смогут загружать файлами и по ссылке, если включено.')),
+          h('div.hint', 'Музыку друзья смогут загружать файлами и по ссылке, если включено. Фильмы — по переключателю «на равных правах» выше.')),
       );
     };
     get('/api/system').then(draw).catch((e) => box.replaceChildren(alertBox(e.message)));

@@ -16,9 +16,14 @@ import { openRoom, roomsSummary, onMediaRemoved, roomFor } from './rooms.js';
 import { tools, refreshYtdlp } from './tools.js';
 
 const isOwner = (u) => u.role === 'owner';
+// «На равных»: друзья добавляют, удаляют и переименовывают всё, запускают фильм и меняют его в комнате.
+// Владелец может выключить в настройках; по умолчанию включено.
+const equal = () => getSetting('friendsEqual', true) !== false;
 const canAddMusic = (u) => isOwner(u) || getSetting('friendsMusic', true) !== false;
-const canAdd = (u, kind) => (kind === 'audio' ? canAddMusic(u) : isOwner(u));
-const canEdit = (u, m) => isOwner(u) || (m.kind === 'audio' && m.added_by === u.id);
+const canAddFilms = (u) => isOwner(u) || equal();
+const canManage = (u) => isOwner(u) || equal();
+const canAdd = (u, kind) => (kind === 'audio' ? canAddMusic(u) : canAddFilms(u));
+const canEdit = (u, m) => canManage(u) || m.added_by === u.id;
 const waitText = (s) => (s >= 90 ? `${Math.ceil(s / 60)} мин` : `${s} с`);
 
 let dummyHash = null;
@@ -29,7 +34,7 @@ export function registerRoutes() {
     sendJson(res, 200, {
       app: APP_NAME,
       user: user ? auth.publicUser(user) : null,
-      can: user ? { films: isOwner(user), music: canAddMusic(user) } : null,
+      can: user ? { films: canAddFilms(user), music: canAddMusic(user), manage: canManage(user) } : null,
       ytdlp: !!tools.ytdlp,
       secure: auth.isSecure(req),
       warnPass: !!user && isOwner(user) && getSetting('ownerDefaultPass', false) === true,
@@ -219,7 +224,7 @@ export function registerRoutes() {
     disk: { free: await freeBytes(DATA), used: await dirSize(DIRS.media) },
     ytdlp: { found: !!tools.ytdlp, version: tools.ytdlpVersion, note: tools.lastNote, checkedAt: tools.lastCheck, updating: !!tools.updating },
     cookies: cookiesInfo(),
-    settings: { friendsMusic: getSetting('friendsMusic', true) !== false },
+    settings: { friendsMusic: getSetting('friendsMusic', true) !== false, friendsEqual: equal() },
   });
 
   route('GET', '/api/system', async ({ res }) => sendJson(res, 200, await systemInfo()), { auth: 'owner' });
@@ -247,6 +252,7 @@ export function registerRoutes() {
   route('POST', '/api/system/settings', async ({ req, res }) => {
     const body = await readJson(req);
     if (typeof body.friendsMusic === 'boolean') setSetting('friendsMusic', body.friendsMusic);
+    if (typeof body.friendsEqual === 'boolean') setSetting('friendsEqual', body.friendsEqual);
     hub.broadcast({ t: 'perms' });
     sendJson(res, 200, await systemInfo());
   }, { auth: 'owner' });
@@ -334,11 +340,12 @@ export function registerRoutes() {
   route('GET', '/api/rooms', async ({ res }) => sendJson(res, 200, { list: roomsSummary() }));
 
   route('POST', '/api/rooms', async ({ req, res, user }) => {
+    if (!canManage(user)) throw bad('Включать фильм может только владелец', 403);
     const body = await readJson(req);
     const r = openRoom(String(body.mediaId || ''), user);
     if (r.error) throw bad(r.error);
     sendJson(res, 200, r);
-  }, { auth: 'owner' });
+  });
 
   route('GET', '/api/rooms/for/:mediaId', async ({ res, params }) => sendJson(res, 200, { room: roomFor(params.mediaId) }));
 

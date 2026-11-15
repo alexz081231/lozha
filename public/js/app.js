@@ -65,7 +65,7 @@ function buildShell() {
   tabbar.hidden = false;
 
   const p1 = pill(navEl), p2 = pill(tabbar);
-  const offNow = mountNow(nowList, { emptyText: me.role === 'owner' ? 'Пока никто не смотрит. Нажми «Смотреть» на фильме — друзья увидят комнату здесь.' : 'Пока никто не смотрит. Когда владелец включит фильм, комната появится здесь.' });
+  const offNow = mountNow(nowList, { emptyText: store.can.manage ? 'Пока никто не смотрит. Нажми «Смотреть» на фильме — остальные увидят комнату здесь.' : 'Пока никто не смотрит. Когда владелец включит фильм, комната появится здесь.' });
   const offTheme = bus.on('theme', paintTheme);
   const offMe = bus.on('me', () => {
     who.replaceChildren(h('b.clip', store.me.name), h('span', store.me.role === 'owner' ? 'владелец' : 'друг'));
