@@ -10,7 +10,7 @@ import * as hub from './hub.js';
 import { bad, HttpError, rid, freeBytes, dirSize, log } from './util.js';
 import { listMedia, getMedia, patchMedia, createMedia } from './library.js';
 import { resolveLink, jobFromResolved } from './links.js';
-import { enqueueDownload, enqueueIngest, cancelAndRemove, retry } from './queue.js';
+import { enqueueDownload, enqueueIngest, cancelAndRemove, retry, chooseAudioTrack } from './queue.js';
 import * as uploads from './uploads.js';
 import { openRoom, roomsSummary, onMediaRemoved, roomFor } from './rooms.js';
 import { tools, refreshYtdlp } from './tools.js';
@@ -290,6 +290,16 @@ export function registerRoutes() {
     if (!m) throw bad('Не найдено', 404);
     if (!canEdit(user, m)) throw bad('Это может только владелец', 403);
     retry(m.id);
+    sendJson(res, 200, { ok: true });
+  });
+
+  // Выбор звуковой дорожки для фильма, в котором их несколько.
+  route('POST', '/api/media/:id/audio', async ({ req, res, params, user }) => {
+    const m = getMedia(params.id);
+    if (!m) throw bad('Не найдено', 404);
+    if (!canEdit(user, m)) throw bad('Это может только владелец', 403);
+    const body = await readJson(req);
+    chooseAudioTrack(m.id, Number(body.index));
     sendJson(res, 200, { ok: true });
   });
 

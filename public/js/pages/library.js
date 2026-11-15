@@ -2,12 +2,38 @@
 import { h, kids, fmtTime, fmtBytes, fmtSpeed, fmtEta, img, ls, debounce } from '../util.js';
 import { icon } from '../icons.js';
 import { store, bus, films, get, post, patch, del } from '../api.js';
-import { seg, menu, toast, confirmDialog, promptDialog, busy } from '../ui.js';
+import { seg, menu, toast, confirmDialog, promptDialog, busy, sheet } from '../ui.js';
 import { nav } from '../nav.js';
 import { mountNow } from '../now.js';
 import { openAddSheet, uploadsTray, enableDrop } from '../add.js';
 
 const inWork = (m) => m.status !== 'ready' || (m.variants || []).some((v) => v.status === 'queued' || v.status === 'processing');
+
+// Окно выбора звуковой дорожки: в файле их несколько, а в фильме останется одна.
+const asked = new Set(); // фильмы, для которых окно уже открывалось само
+const pickOpen = new Set();
+function pickAudio(m) {
+  const info = m.audioChoice;
+  if (!info?.tracks?.length || pickOpen.has(m.id)) return;
+  pickOpen.add(m.id);
+  const name = `audio-${m.id}`;
+  let pick = info.tracks.some((t) => t.index === info.default) ? info.default : info.tracks[0].index;
+  const rows = info.tracks.map((t) => h('label.audio-opt',
+    h('input', { type: 'radio', name, checked: t.index === pick, onchange: () => { pick = t.index; } }), h('span', t.label)));
+  const okBtn = h('button.btn.btn-primary', { type: 'button', onclick: async () => {
+    busy(okBtn, true);
+    try { await post(`/api/media/${m.id}/audio`, { index: pick }); s.close(); } catch (e) { busy(okBtn, false); toast(e.message); }
+  } }, h('span', 'Оставить эту'));
+  const s = sheet({
+    title: 'Какую дорожку звука оставить?',
+    body: [
+      h('p.muted', { style: { margin: 0 } }, `В файле «${m.title}» несколько дорожек. В фильме останется одна, поменять её потом можно только загрузив файл заново.`),
+      h('div.audio-pick', rows),
+    ],
+    foot: [h('button.btn.btn-ghost', { type: 'button', onclick: () => s.close() }, 'Позже'), okBtn],
+    onClose: () => pickOpen.delete(m.id),
+  });
+}
 
 export async function openFilm(id) {
   const m = store.media.get(id);
@@ -40,9 +66,10 @@ function filmCard(m, i) {
 
   function openMenu() {
     const cur = el._m;
-    const busyNow = ['queued', 'downloading', 'processing'].includes(cur.status);
+    const busyNow = ['queued', 'downloading', 'processing', 'choose'].includes(cur.status);
     menu(more, [
       cur.status === 'ready' ? { icon: 'play', label: 'Смотреть', fn: () => openFilm(cur.id) } : null,
+      cur.status === 'choose' ? { icon: 'check', label: 'Выбрать дорожку звука', fn: () => pickAudio(cur) } : null,
       cur.status === 'error' && cur.retryable ? { icon: 'refresh', label: 'Повторить', fn: () => post(`/api/media/${cur.id}/retry`).catch((e) => toast(e.message)) } : null,
       { icon: 'edit', label: 'Переименовать', fn: async () => {
         const name = await promptDialog({ title: 'Название фильма', value: cur.title });
@@ -90,7 +117,13 @@ function filmCard(m, i) {
     } else {
       work.hidden = false;
       meta.textContent = x.status === 'error' ? 'Ошибка' : (x.stage || 'В очереди');
-      if (x.status === 'error') {
+      if (x.status === 'choose') {
+        workMode = 'choose';
+        work.replaceChildren(h('div.stage', 'В файле несколько дорожек звука'),
+          h('button.btn.btn-s', { type: 'button', onclick: (e) => { e.stopPropagation(); pickAudio(el._m); } }, h('span', 'Выбрать дорожку')));
+        // Тот, кто добавил фильм, получает окно сам, как только файл дошёл до сервера.
+        if (x.addedBy === store.me.id && !asked.has(x.id)) { asked.add(x.id); pickAudio(x); }
+      } else if (x.status === 'error') {
         if (workMode !== 'error') {
           workMode = 'error';
           work.replaceChildren(...kids(icon('warn'), h('div.err'), manage && x.retryable

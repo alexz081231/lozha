@@ -4,7 +4,9 @@ import path from 'node:path';
 import { tools } from './tools.js';
 import { run, runLines } from './procs.js';
 import { sql } from './db.js';
-import { mediaDir, patchMedia, patchVariant, getMedia } from './library.js';
+import {
+  mediaDir, patchMedia, patchVariant, getMedia, writeAudioTracks, readAudioChoice, clearAudioChoice,
+} from './library.js';
 import { clamp, log, titleFromName } from './util.js';
 
 export class UserError extends Error {
@@ -94,15 +96,18 @@ export function summarize(p) {
       still: still(vs),
     };
   }
-  const audio = as ? {
-    index: as.index,
-    codec: as.codec_name,
-    profile: as.profile || '',
-    channels: num(as.channels),
-    rate: num(as.sample_rate),
-    lang: as.tags?.language || '',
-    bitrate: num(as.bit_rate),
-  } : null;
+  const audioOf = (st) => ({
+    index: st.index,
+    codec: st.codec_name,
+    profile: st.profile || '',
+    channels: num(st.channels),
+    rate: num(st.sample_rate),
+    lang: st.tags?.language || '',
+    title: st.tags?.title || '',
+    bitrate: num(st.bit_rate || st.tags?.BPS || st.tags?.['BPS-eng']),
+  });
+  const audio = as ? audioOf(as) : null;
+  const audios = auds.map(audioOf);
   const subs = streams.filter((s) => s.codec_type === 'subtitle' && TEXT_SUBS.has(s.codec_name)).map((s, i) => {
     const lang = (s.tags?.language || '').toLowerCase();
     const title = s.tags?.title || '';
@@ -116,9 +121,20 @@ export function summarize(p) {
     duration,
     size: num(fmt.size),
     bitrate: num(fmt.bit_rate),
-    video, audio, subs, tags, q,
+    video, audio, audios, subs, tags, q,
     cover: pics[0] || (video?.still ? vids[0] : null),
   };
+}
+
+// Подпись дорожки для окна выбора: «Русский · HDrezka · AAC 2.0 · 192 кбит/с».
+const CODEC_NAME = { aac: 'AAC', ac3: 'AC3', eac3: 'E-AC3', dts: 'DTS', truehd: 'TrueHD', mp3: 'MP3', opus: 'Opus', vorbis: 'Vorbis', flac: 'FLAC' };
+const LAYOUT = { 1: '1.0', 2: '2.0', 3: '2.1', 4: '4.0', 6: '5.1', 7: '6.1', 8: '7.1' };
+export function audioLabel(a, i) {
+  const lang = (a.lang || '').toLowerCase();
+  const name = LANG[lang] || (lang && lang !== 'und' ? lang.toUpperCase() : '');
+  const codec = CODEC_NAME[a.codec] || String(a.codec || '').toUpperCase();
+  const tech = [`${codec} ${LAYOUT[a.channels] || (a.channels ? `${a.channels} кан.` : '')}`.trim(), a.bitrate ? `${Math.round(a.bitrate / 1000)} кбит/с` : ''].filter(Boolean).join(' · ');
+  return [name || `Дорожка ${i + 1}`, a.title, tech].filter(Boolean).join(' · ');
 }
 
 // Строка кодека для canPlayType в браузере.
@@ -244,7 +260,20 @@ export async function ingestVideo(m, onProgress) {
   const s = summarize(await probe(orig));
   if (!s.video || s.video.still) throw new UserError('В файле нет видеодорожки');
   if (!(s.duration > 0)) throw new UserError('Не удалось определить длительность видео');
-  const v = s.video, a = s.audio;
+  const v = s.video;
+  let a = s.audio;
+
+  // Несколько звуковых дорожек: в итоговый файл попадает одна, и выбирает её человек.
+  if (s.audios.length > 1) {
+    const choice = readAudioChoice(m.id);
+    const picked = choice == null ? null : s.audios.find((t) => t.index === choice);
+    if (!picked) {
+      writeAudioTracks(m.id, { default: s.audio.index, tracks: s.audios.map((t, i) => ({ index: t.index, label: audioLabel(t, i) })) });
+      patchMedia(m.id, { status: 'choose', stage: 'Выбери дорожку звука', progress: 0, error: null });
+      return null;
+    }
+    a = picked;
+  }
   const tmp = path.join(dir, 'source.tmp.mp4');
   const out = path.join(dir, 'source.mp4');
 
@@ -325,6 +354,7 @@ export async function ingestVideo(m, onProgress) {
     vcodec: sv.codec, acodec: s2.audio?.codec || '', poster: hasPoster ? Date.now() : 0,
   });
   await fs.promises.rm(orig, { force: true }).catch(() => {});
+  clearAudioChoice(m.id);
   return { ...s2, q, hdr: sv.hdr };
 }
 

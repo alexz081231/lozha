@@ -5,6 +5,7 @@ import { sql } from './db.js';
 import { DIRS, MAX_DOWNLOADS } from './config.js';
 import {
   getMedia, patchMedia, setLive, removeMedia, mediaDir, variantsOf, getVariant, patchVariant, setVariantProgress, touch,
+  saveAudioChoice,
 } from './library.js';
 import { ingestVideo, ingestAudio, transcodeVariant, LADDER, qLabel, summarize, probe, origOf } from './media.js';
 import { downloadMedia, siteVariantPlan, readInfo, downloadSiteVariant } from './links.js';
@@ -80,6 +81,7 @@ async function runIngest(id) {
   try {
     if (m.kind === 'video') {
       const src = await ingestVideo(m, onP);
+      if (!src) { log(`[${id}] «${m.title}»: в файле несколько звуковых дорожек, жду выбора`); return; }
       log(`[${id}] «${m.title}» готов к просмотру: ${src.video.codec} ${src.video.dispW}×${src.video.dispH} ${Math.round(src.video.fps)} fps`);
       planVariants(id, src);
     } else {
@@ -182,6 +184,16 @@ export async function cancelAndRemove(id) {
     for (const n of await fs.promises.readdir(DIRS.tmp)) if (n === id || n.startsWith(`${id}-`)) await rmrf(path.join(DIRS.tmp, n));
   } catch {}
   setTimeout(() => { rmrf(mediaDir(id)); rmrf(path.join(DIRS.tmp, id)); }, 3500); // на случай, если процесс успел что-то дописать
+}
+
+// Человек выбрал звуковую дорожку для фильма, который ждал выбора: продолжаем приём.
+export function chooseAudioTrack(id, index) {
+  const m = getMedia(id);
+  if (!m) throw bad('Не найдено', 404);
+  if (m.status !== 'choose') throw bad('Дорожку уже выбрали');
+  if (!Number.isInteger(index) || !saveAudioChoice(id, index)) throw bad('Такой дорожки нет в файле');
+  patchMedia(id, { status: 'processing', stage: 'Обрабатывается', progress: 0, error: null });
+  enqueueIngest(id);
 }
 
 export function retry(id) {

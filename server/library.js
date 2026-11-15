@@ -40,6 +40,7 @@ export function publicMedia(m) {
     createdAt: m.created_at,
   };
   if (m.kind === 'video') {
+    if (m.status === 'choose') out.audioChoice = readAudioTracks(m.id) || { default: null, tracks: [] };
     out.variants = variantsOf(m.id).map((v) => ({
       id: v.id,
       kind: v.kind,
@@ -63,6 +64,26 @@ export function publicMedia(m) {
     out.url = m.status === 'ready' && m.file ? `/media/${m.id}/${m.file}?v=${m.poster || m.created_at}` : '';
   }
   return out;
+}
+
+// ── Выбор звуковой дорожки ────────────────────────────────────────────────
+// Если в файле несколько дорожек, приём ставится на паузу (status = 'choose'): список лежит в audio-tracks.json,
+// ответ человека — в audio-choice.json. Оба файла живут рядом с фильмом и пропадают вместе с ним.
+const tracksFile = (id) => path.join(mediaDir(id), 'audio-tracks.json');
+const choiceFile = (id) => path.join(mediaDir(id), 'audio-choice.json');
+const readJsonFile = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+
+export const readAudioTracks = (id) => readJsonFile(tracksFile(id)); // { default, tracks: [{ index, label }] }
+export const writeAudioTracks = (id, data) => fs.writeFileSync(tracksFile(id), JSON.stringify(data));
+export const readAudioChoice = (id) => { const c = readJsonFile(choiceFile(id)); return Number.isInteger(c?.index) ? c.index : null; };
+export function saveAudioChoice(id, index) {
+  const t = readAudioTracks(id);
+  if (!t || !t.tracks.some((x) => x.index === index)) return false;
+  fs.writeFileSync(choiceFile(id), JSON.stringify({ index }));
+  return true;
+}
+export function clearAudioChoice(id) {
+  for (const f of [tracksFile(id), choiceFile(id)]) fs.rmSync(f, { force: true });
 }
 
 export function listMedia() {
