@@ -4,6 +4,8 @@ import * as hub from './hub.js';
 import { getMedia } from './library.js';
 import { getSetting, setSetting } from './db.js';
 import { rid, clamp, log } from './util.js';
+import { accrueWatch, flushWatch, flushAllWatch } from './points.js';
+import { initBets, betView, cancelRoomBets, cancelOrphanBets } from './bets.js';
 
 const SEEK_HOLD = 7000; // сколько ждём всех после перемотки
 const STALL_HOLD = 20000; // сколько ждём того, у кого видео подвисло
@@ -115,11 +117,14 @@ class Room {
     if (conn.room !== this) {
       conn.room?.leave(conn);
       conn.room = this;
-      this.members.set(conn.id, { conn, ready: false, loaded: false, away: false, voice: null, times: { chat: [], react: [] } });
+      this.members.set(conn.id, { conn, ready: false, loaded: false, away: false, voice: null, times: { chat: [], react: [], bet: [] } });
       this.emptySince = 0;
       this.event(conn, 'join');
     }
-    conn.send({ t: 'room:joined', room: this.id, you: conn.id, state: this.state(), viewers: this.viewers(), chat: this.chat.slice(-100) });
+    conn.send({
+      t: 'room:joined', room: this.id, you: conn.id, state: this.state(), viewers: this.viewers(), chat: this.chat.slice(-100),
+      bet: this.kind === 'film' ? betView(this.id, conn.user.id) : null,
+    });
     this.pushViewers();
   }
 
@@ -128,6 +133,7 @@ class Room {
     if (!m) return;
     this.members.delete(conn.id);
     conn.room = null;
+    try { flushWatch(conn.user.id); } catch (e) { log('очки за просмотр:', e.message); }
     if (m.voice) this.send({ t: 'voice:left', cid: conn.id });
     if (!silent) this.event(conn, 'leave');
     if (this.waitFor.delete(conn.id)) this.checkWait();
@@ -301,6 +307,16 @@ class Room {
   }
 
   tick(now) {
+    // Очки: смотрит тот, у кого фильм идёт, загружен и вкладка не свёрнута.
+    const dt = Math.min(now - (this.lastTick || now), 1500);
+    this.lastTick = now;
+    if (this.kind === 'film' && this.playing && !this.waiting && this.mediaId && dt > 0) {
+      for (const mem of this.members.values()) {
+        if (mem.loaded && mem.ready && !mem.away) {
+          try { accrueWatch(mem.conn.user.id, dt, now); } catch (e) { log('очки за просмотр:', e.message); }
+        }
+      }
+    }
     if (this.waiting) this.checkWait();
     if (this.playing && !this.waiting && this.mediaId) {
       const d = this.duration;
@@ -465,6 +481,7 @@ export function roomFor(mediaId) {
 }
 
 export function closeRoom(room, by) {
+  if (room.kind === 'film') { try { cancelRoomBets(room.id); } catch (e) { log('не удалось отменить ставку:', e.message); } }
   room.send({ t: 'room:closed', room: room.id, by: by?.user.name || '' });
   for (const m of room.members.values()) m.conn.room = null;
   room.members.clear();
@@ -502,6 +519,9 @@ export function initRooms() {
     r.createdAt = s.createdAt || Date.now();
     rooms.set(r.id, r);
   }
+  cancelOrphanBets(new Set(rooms.keys())); // ставки комнат, которых после перезапуска нет, отменяем и возвращаем очки
+  initBets();
+
   const ms = getSetting('music', null);
   if (ms?.queue) {
     music.queue = ms.queue.filter((x) => x && getMedia(x.trackId)?.status === 'ready');
@@ -562,5 +582,6 @@ export function initRooms() {
 export function saveRoomsNow() {
   clearTimeout(saveTimer);
   saveTimer = null;
+  flushAllWatch();
   if (music) save();
 }

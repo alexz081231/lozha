@@ -103,6 +103,40 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+CREATE TABLE IF NOT EXISTS points (
+  user_id INTEGER PRIMARY KEY,
+  balance INTEGER NOT NULL DEFAULT 0,
+  watch_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS points_log (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  delta INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  ref TEXT,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS points_log_user ON points_log(user_id, id);
+CREATE TABLE IF NOT EXISTS bets (
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  question TEXT NOT NULL,
+  opt_a TEXT NOT NULL,
+  opt_b TEXT NOT NULL,
+  status TEXT NOT NULL,
+  winner INTEGER,
+  created_by INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  closed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS bets_room ON bets(room_id, created_at);
+CREATE TABLE IF NOT EXISTS bet_stakes (
+  bet_id TEXT NOT NULL REFERENCES bets(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL,
+  opt INTEGER NOT NULL,
+  amount INTEGER NOT NULL,
+  PRIMARY KEY (bet_id, user_id)
+);
 `);
 
 const cache = new Map();

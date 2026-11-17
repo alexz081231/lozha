@@ -15,6 +15,7 @@ export const store = {
   rooms: [],
   music: null, // состояние музыкальной комнаты
   online: new Set(),
+  points: 0, // мои очки
 };
 
 export class ApiError extends Error {
@@ -215,6 +216,10 @@ export const rt = {
       case 'rooms':
         store.rooms = m.list || [];
         bus.emit('rooms');
+        return;
+      case 'points':
+        store.points = m.balance | 0;
+        bus.emit('points', m);
         return;
       case 'presence':
         store.online = new Set(m.online || []);

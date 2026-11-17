@@ -40,12 +40,14 @@ export class RoomSession {
       this.sent = { seq: -1, ready: null };
       if (document.hidden) rt.send({ t: 'room:status', away: true });
       this.h.onJoined?.(m);
+      this.h.onBet?.(m.bet ?? null, { quiet: true });
       this.setState(m.state);
     });
     on('room:state', (m) => { if (this.joined) this.setState(m); });
     on('room:viewers', (m) => { this.viewers = m.viewers; this.h.onViewers?.(m.viewers); });
     on('room:event', (m) => this.h.onEvent?.(m));
     on('room:chat', (m) => this.h.onChat?.(m.msg));
+    on('room:bet', (m) => this.h.onBet?.(m.bet));
     on('room:react', (m) => this.h.onReact?.(m));
     on('room:closed', (m) => this.h.onGone?.('closed', m));
     on('room:gone', (m) => this.h.onGone?.('gone', m));
@@ -185,7 +187,7 @@ export function reactionBar(onPick) {
 }
 
 // ── Панель: чат и зрители (и дополнительные вкладки, например очередь) ────
-export function roomPanel({ onSeek, extra = [], who = 'Зрители', voice = null }) {
+export function roomPanel({ onSeek, extra = [], late = [], who = 'Зрители', voice = null }) {
   const chatList = h('div.chat-list');
   const chatEmpty = h('div.chat-empty', 'Здесь будет чат комнаты. Напиши первым — сообщение получит отметку момента.');
   chatList.append(chatEmpty);
@@ -205,6 +207,7 @@ export function roomPanel({ onSeek, extra = [], who = 'Зрители', voice = 
     ...extra.map((x) => ({ key: x.key, label: x.label, el: h('div.rpane', x.el) })),
     { key: 'chat', label: 'Чат', el: h('div.rpane', chatList, newPill, form) },
     { key: 'who', label: who, el: h('div.rpane', viewersEl) },
+    ...late.map((x) => ({ key: x.key, label: x.label, el: h('div.rpane', x.el) })), // вкладки после чата и зрителей
   ];
   let tab = panes[0].key;
   let unread = 0;

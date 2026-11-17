@@ -7,6 +7,7 @@ import { nav } from '../nav.js';
 import { Player } from '../player.js';
 import { RoomSession, roomPanel, reactionBar, eventText } from '../room.js';
 import { Voice, voiceBar } from '../voice.js';
+import { betsPane } from '../bets.js';
 import { music } from '../musicplayer.js';
 
 async function ensureMedia() {
@@ -36,7 +37,8 @@ export async function roomPage(root, roomId) {
   voice.uidOf = (cid) => session.viewers.find((v) => v.cid === cid)?.id ?? null;
   const vbar = voiceBar(voice);
 
-  const panel = roomPanel({ onSeek: (t) => session.control('seek', t), voice });
+  const bets = betsPane({ openTab: () => panel.setTab('bets') });
+  const panel = roomPanel({ onSeek: (t) => session.control('seek', t), voice, late: [{ key: 'bets', label: 'Ставки', el: bets.el }] });
 
   const session = new RoomSession(roomId, {
     getEl: () => player?.video,
@@ -52,6 +54,7 @@ export async function roomPage(root, roomId) {
       player?.flash(eventText(e), 2800);
     },
     onChat: (msg) => panel.addChat(msg),
+    onBet: (bet, opts) => bets.setBet(bet, opts),
     onReact: (m) => player?.react(m.emoji, m.user.id === store.me.id ? '' : m.user.name),
     onGone: (why, m) => {
       if (closed) return;
@@ -123,6 +126,7 @@ export async function roomPage(root, roomId) {
     closed = true;
     window.__room = null;
     offMedia();
+    bets.destroy();
     voice.leave();
     session.stop();
     player?.destroy();
