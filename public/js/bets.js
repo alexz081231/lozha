@@ -132,9 +132,12 @@ export function betsPane({ openTab } = {}) {
   }
 
   function drawBoard() {
+    // Тех, у кого 0 очков и кто не участвует в ставке, не показываем.
+    const inBet = new Set((bet?.stakes || []).map((s) => s.id));
+    const shown = board.filter((u) => u.balance > 0 || inBet.has(u.id));
     boardEl.replaceChildren(
       h('div.bets-title', 'Очки'),
-      ...(board.length ? board.map((u) => h(`div.bets-row${u.id === store.me.id ? '.me' : ''}`,
+      ...(shown.length ? shown.map((u) => h(`div.bets-row${u.id === store.me.id ? '.me' : ''}`,
         avatar(u, 's'), h('span.clip', u.name, u.id === store.me.id ? ' (ты)' : ''), h('b.num', String(u.balance))))
         : [h('div.small.faint', 'Пока никого.')]));
   }
@@ -145,6 +148,7 @@ export function betsPane({ openTab } = {}) {
     if (!prev || !next || prev.id !== next.id) pick = null;
     bet = next;
     draw();
+    drawBoard();
     if (quiet || !next) return;
     if (next.status === 'open' && (!prev || prev.id !== next.id) && !isOwner()) { // создателю напоминать о его же ставке не нужно
       toast(`Новая ставка: ${next.question}`, { action: openTab ? { label: 'Открыть', fn: openTab } : null, timeout: 8000 });
