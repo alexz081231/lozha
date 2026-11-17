@@ -132,14 +132,14 @@ export function betsPane({ openTab } = {}) {
   }
 
   function drawBoard() {
-    // Тех, у кого 0 очков и кто не участвует в ставке, не показываем.
+    // Показываем только тех, кто участвует в текущей ставке; пока ставок нет, блока нет.
     const inBet = new Set((bet?.stakes || []).map((s) => s.id));
-    const shown = board.filter((u) => u.balance > 0 || inBet.has(u.id));
-    boardEl.replaceChildren(
-      h('div.bets-title', 'Очки'),
-      ...(shown.length ? shown.map((u) => h(`div.bets-row${u.id === store.me.id ? '.me' : ''}`,
-        avatar(u, 's'), h('span.clip', u.name, u.id === store.me.id ? ' (ты)' : ''), h('b.num', String(u.balance))))
-        : [h('div.small.faint', 'Пока никого.')]));
+    const shown = board.filter((u) => inBet.has(u.id));
+    boardEl.hidden = !shown.length;
+    boardEl.replaceChildren(...kids(
+      h('div.bets-title', 'Очки участников'),
+      shown.map((u) => h(`div.bets-row${u.id === store.me.id ? '.me' : ''}`,
+        avatar(u, 's'), h('span.clip', u.name, u.id === store.me.id ? ' (ты)' : ''), h('b.num', String(u.balance))))));
   }
 
   // Что пришло от сервера
