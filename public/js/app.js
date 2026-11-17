@@ -50,7 +50,8 @@ function buildShell() {
     toast({ auto: 'Тема: как в системе', dark: 'Тема: тёмная', light: 'Тема: светлая' }[next], { timeout: 1600 });
   };
   paintTheme();
-  const who = h('a.who', { href: '/settings' }, h('b.clip', me.name), h('span', me.role === 'owner' ? 'владелец' : 'друг'));
+  const roleLine = () => `${store.me.role === 'owner' ? 'владелец' : 'друг'} · ${store.points || 0} оч.`;
+  const who = h('a.who', { href: '/settings' }, h('b.clip', me.name), h('span', roleLine()));
   const ava = h('a', { href: '/settings' }, avatar(me));
   side.replaceChildren(
     h('a.brand', { href: '/' }, logo(), h('span', store.app)),
@@ -68,8 +69,12 @@ function buildShell() {
   const offNow = mountNow(nowList, { emptyText: store.can.manage ? 'Пока никто не смотрит. Нажми «Смотреть» на фильме — остальные увидят комнату здесь.' : 'Пока никто не смотрит. Когда владелец включит фильм, комната появится здесь.' });
   const offTheme = bus.on('theme', paintTheme);
   const offMe = bus.on('me', () => {
-    who.replaceChildren(h('b.clip', store.me.name), h('span', store.me.role === 'owner' ? 'владелец' : 'друг'));
+    who.replaceChildren(h('b.clip', store.me.name), h('span', roleLine()));
     ava.replaceChildren(avatar(store.me));
+  });
+  const offPoints = bus.on('points', (m) => {
+    who.replaceChildren(h('b.clip', store.me.name), h('span', roleLine()));
+    if (m.reason === 'grant') toast(`Владелец ${m.delta > 0 ? 'начислил' : 'снял'} ${Math.abs(m.delta)} очков`);
   });
   shell = {
     active(key) {
@@ -77,7 +82,7 @@ function buildShell() {
       p1.update();
       p2.update();
     },
-    destroy() { p1.destroy(); p2.destroy(); offNow(); offTheme(); offMe(); },
+    destroy() { p1.destroy(); p2.destroy(); offNow(); offTheme(); offMe(); offPoints(); },
   };
 }
 

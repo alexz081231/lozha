@@ -2,6 +2,7 @@
 import { h, fmtBytes } from '../util.js';
 import { icon } from '../icons.js';
 import { store, bus, get, post, put, del, loadMe } from '../api.js';
+import { nav } from '../nav.js';
 import { seg, toast, confirmDialog, avatar, busy, alertBox } from '../ui.js';
 
 async function shrinkAvatar(file) {
@@ -128,6 +129,8 @@ export function settingsPage(root) {
         try { await post('/api/system/settings', { friendsEqual: on }); } catch (e) { toast(e.message); swEq.setAttribute('aria-checked', String(!on)); }
       };
       box.replaceChildren(
+        h('div.card', h('div.kv', h('span', 'Очки друзей'), h('button.btn.btn-s', { type: 'button', onclick: () => nav.go('/friends') }, 'Выдать очки')),
+          h('div.hint', 'Начислять и снимать очки можно у каждого на странице «Друзья», кнопка с числом очков.')),
         h('div.card', h('div.kv', h('span', 'Друзья на равных правах'), swEq),
           h('div.hint', 'Друзья смогут добавлять и удалять фильмы и музыку, переименовывать их, включать фильм, менять его и закрывать комнату. Приглашать новых людей и менять настройки по-прежнему можешь только ты.')),
         h('div.card',

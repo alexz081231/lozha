@@ -14,6 +14,7 @@ import { enqueueDownload, enqueueIngest, cancelAndRemove, retry, chooseAudioTrac
 import * as uploads from './uploads.js';
 import { openRoom, roomsSummary, onMediaRemoved, roomFor } from './rooms.js';
 import { tools, refreshYtdlp } from './tools.js';
+import { balanceOf, change, tell } from './points.js';
 
 const isOwner = (u) => u.role === 'owner';
 // «На равных»: друзья добавляют, удаляют и переименовывают всё, запускают фильм и меняют его в комнате.
@@ -186,11 +187,26 @@ export function registerRoutes() {
     const now = Date.now();
     sendJson(res, 200, {
       friends: sql('SELECT * FROM users ORDER BY role DESC, created_at').all().map((u) => ({
-        ...auth.publicUser(u), createdAt: u.created_at, online: online.has(u.id),
+        ...auth.publicUser(u), createdAt: u.created_at, online: online.has(u.id), balance: balanceOf(u.id),
       })),
       invites: sql('SELECT * FROM invites WHERE used_by IS NULL AND expires_at > ? ORDER BY created_at DESC').all(now)
         .map((i) => ({ token: i.token, createdAt: i.created_at, expiresAt: i.expires_at })),
     });
+  }, { auth: 'owner' });
+
+  // Владелец начисляет или снимает очки (delta > 0 — начислить, < 0 — снять; ниже нуля баланс не опускается).
+  route('POST', '/api/friends/:id/points', async ({ req, res, params, user }) => {
+    const u = sql('SELECT * FROM users WHERE id = ?').get(Number(params.id));
+    if (!u) throw bad('Нет такого пользователя', 404);
+    const body = await readJson(req);
+    let delta = Math.trunc(Number(body.delta));
+    if (!Number.isFinite(delta) || delta === 0) throw bad('Укажи число очков');
+    if (Math.abs(delta) > 100000) throw bad('Слишком много очков за раз');
+    delta = Math.max(delta, -balanceOf(u.id)); // снять можно не больше, чем есть
+    if (delta === 0) throw bad('У него нет очков, снимать нечего');
+    tx(() => change(u.id, delta, 'grant', String(user.id)));
+    tell(u.id, delta, 'grant');
+    sendJson(res, 200, { balance: balanceOf(u.id), delta });
   }, { auth: 'owner' });
 
   route('DELETE', '/api/friends/:id', async ({ res, params }) => {
